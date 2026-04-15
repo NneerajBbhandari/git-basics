@@ -38,13 +38,41 @@ jobs:
       - name: Build site
         run: pnpm build -- --base=/git-basics/
 
+      - name: Generate index.html for Pages
+        run: |
+          set -euo pipefail
+          mkdir -p dist/client
+          CSS_FILE=$(ls dist/client/assets/styles-*.css | head -n 1)
+          JS_ENTRY=$(grep -rl "hydrateRoot(" dist/client/assets/index-*.js | head -n 1)
+          if [ -z "${CSS_FILE:-}" ] || [ -z "${JS_ENTRY:-}" ]; then
+            echo "Could not find built CSS/JS entry files in dist/client/assets"
+            exit 1
+          fi
+          CSS_BASENAME=$(basename "$CSS_FILE")
+          JS_BASENAME=$(basename "$JS_ENTRY")
+          cat > dist/client/index.html <<EOF
+          <!doctype html>
+          <html lang="en">
+            <head>
+              <meta charset="UTF-8" />
+              <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+              <title>Portfolio</title>
+              <link rel="stylesheet" href="/git-basics/assets/${CSS_BASENAME}" />
+            </head>
+            <body>
+              <div id="root"></div>
+              <script type="module" src="/git-basics/assets/${JS_BASENAME}"></script>
+            </body>
+          </html>
+          EOF
+
       - name: Add SPA fallback
-        run: cp dist/index.html dist/404.html
+        run: cp dist/client/index.html dist/client/404.html
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: dist/client
 
   deploy:
     needs: build
