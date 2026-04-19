@@ -23,6 +23,11 @@ If the app shows a config error table, fix the listed field path in `portfolio.c
 ## Contact Form (Google SMTP)
 The contact form posts to `POST /api/contact`.
 
+Note for GitHub Pages: GitHub Pages is static hosting, so `POST /api/contact` will not run there.
+To make the contact form work on a GitHub Pages frontend, point it to a deployed API endpoint
+(for example on Vercel) by setting:
+- `VITE_CONTACT_ENDPOINT=https://your-vercel-app.vercel.app/api/contact`
+
 Set environment variables before running:
 - `SMTP_HOST`
 - `SMTP_PORT`
