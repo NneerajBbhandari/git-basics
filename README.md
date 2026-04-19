@@ -35,12 +35,16 @@ Set environment variables before running:
 - `SMTP_PASS`
 - `CONTACT_TO_EMAIL`
 
+For Vercel deployments, set these env vars for both Preview and Production environments,
+then redeploy after any change.
+
 You can start by copying `.env.example` into your local `.env`.
 
 Recommended Gmail setup:
 - Use `smtp.gmail.com`
 - Use port `465` (SSL) or `587` (TLS)
 - Use a Gmail App Password, not your normal account password
+- If copied with spaces (example format: `abcd efgh ijkl mnop`), it is accepted.
 
 ## Troubleshooting
 | Problem | Likely Cause | Fix |

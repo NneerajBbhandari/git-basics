@@ -8,6 +8,8 @@ const ContactPayloadSchema = z.object({
   website: z.string().optional(),
 });
 
+const EmailSchema = z.string().trim().email();
+
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
 const RATE_LIMIT_MAX_REQUESTS = 5;
 
@@ -56,13 +58,45 @@ function isRateLimited(ip: string): boolean {
 }
 
 function getRequiredEnv(name: string): string {
-  const value = process.env[name];
+  const rawValue = process.env[name];
+
+  if (!rawValue) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+
+  const value = rawValue.trim().replace(/^"|"$/g, "").replace(/^'|'$/g, "");
 
   if (!value) {
     throw new Error(`Missing required environment variable: ${name}`);
   }
 
   return value;
+}
+
+function normalizeSmtpPassword(value: string): string {
+  // App passwords are often copied with spaces from Google UI.
+  return value.replace(/\s+/g, "");
+}
+
+function buildPublicErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return "Contact service is not configured right now. Please try again later.";
+  }
+
+  if (error.message.startsWith("Missing required environment variable:")) {
+    return "Contact service setup is incomplete. Set SMTP and CONTACT_TO_EMAIL vars in Vercel (Preview and Production), then redeploy.";
+  }
+
+  if (error.message.includes("CONTACT_TO_EMAIL must be a valid email")) {
+    return "CONTACT_TO_EMAIL is invalid. Set a real receiving email in Vercel env vars and redeploy.";
+  }
+
+  const maybeCode = (error as { code?: string }).code;
+  if (maybeCode === "EAUTH") {
+    return "SMTP authentication failed. Verify SMTP_USER and Gmail App Password in Vercel env vars.";
+  }
+
+  return "Contact service is not configured right now. Please try again later.";
 }
 
 function sendJson(res: { status: (code: number) => { json: (body: unknown) => void } }, status: number, body: unknown) {
@@ -83,7 +117,17 @@ export default async function handler(req: any, res: any) {
     });
   }
 
-  const parsed = ContactPayloadSchema.safeParse(req.body);
+  let payload: unknown = req.body;
+
+  if (typeof payload === "string") {
+    try {
+      payload = JSON.parse(payload);
+    } catch {
+      return sendJson(res, 400, { ok: false, error: "Invalid JSON payload." });
+    }
+  }
+
+  const parsed = ContactPayloadSchema.safeParse(payload);
 
   if (!parsed.success) {
     const firstIssue = parsed.error.issues[0];
@@ -101,9 +145,13 @@ export default async function handler(req: any, res: any) {
     const host = getRequiredEnv("SMTP_HOST");
     const portRaw = getRequiredEnv("SMTP_PORT");
     const user = getRequiredEnv("SMTP_USER");
-    const pass = getRequiredEnv("SMTP_PASS");
+    const pass = normalizeSmtpPassword(getRequiredEnv("SMTP_PASS"));
     const contactToEmail = getRequiredEnv("CONTACT_TO_EMAIL");
     const senderName = process.env.SITE_NAME || "Portfolio";
+
+    if (!EmailSchema.safeParse(contactToEmail).success) {
+      throw new Error("CONTACT_TO_EMAIL must be a valid email");
+    }
 
     const port = Number(portRaw);
 
@@ -154,7 +202,7 @@ export default async function handler(req: any, res: any) {
     console.error("Contact API error:", error);
     return sendJson(res, 500, {
       ok: false,
-      error: "Contact service is not configured right now. Please try again later.",
+      error: buildPublicErrorMessage(error),
     });
   }
 }
